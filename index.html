@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<style>
+/* VOICE: atelier d'imprimeur, net et pratique, l'outil d'abord.
+   IDEA: une table lumineuse d'imposition — des feuilles posées, qu'on prend et qu'on aligne sur une bande d'assemblage.
+   PICTURE: l'outil lui-même : planches de miniatures à gauche, bande d'assemblage numérotée à droite.
+   COLOUR and TYPE: champ ciel #4fb3e8, blanc, encre #10223a, orange #ff7a1a pour l'export ; nuit #0b1726. Outfit 600 + Inter.
+   LAYOUT: bandeau ciel avec titre et actions, puis deux panneaux (5/7), empilés sous 900px. */
+:root{color-scheme:light dark;--bg:light-dark(#eef4f9,#0b1726);--ink:light-dark(#10223a,#e5eef7);--panel:light-dark(#ffffff,#112136);--line:light-dark(#d3e1ec,#223650);--muted:light-dark(#566b82,#93a8bf);--sky:#4fb3e8;--hot:#ff7a1a;--sheet:light-dark(#e3edf5,#0d1b2d)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(18px,3vw,40px) max(4vw,16px)}
+h1,h2{font-family:Outfit,Inter,sans-serif;font-weight:600;margin:0;line-height:1.05;text-wrap:balance}
+h1{font-size:clamp(32px,4vw,44px)}h2{font-size:22px}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--hot);outline-offset:2px}
+.top{background:var(--sky);color:#10223a;display:flex;flex-wrap:wrap;gap:18px 32px;align-items:flex-end;justify-content:space-between}
+.top p{margin:6px 0 0;max-width:46ch;font-size:16px}
+.acts{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:10px;border:0;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn.ghost{background:#fff;color:#10223a}.btn.hot{background:var(--hot);color:#1b0d02}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.fname{display:grid;font-size:13px;font-weight:500}
+.fname input{min-height:44px;border-radius:10px;border:2px solid #10223a22;background:#ffffffd9;color:#10223a;padding:0 12px;width:210px;font-size:16px}
+.work{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:20px;align-items:start}
+@media(max-width:900px){.work{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.ph{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin-bottom:12px}
+.muted{color:var(--muted);font-size:14px}
+.chk{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.chk input{width:18px;height:18px;accent-color:var(--hot)}
+.note{margin:0 0 12px;font-size:14px;color:var(--muted);background:var(--sheet);border-radius:10px;padding:8px 12px}
+.grp{border-top:1px solid var(--line);padding:10px 0}
+.grp summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;min-height:44px}
+.grp summary::-webkit-details-marker{display:none}
+.grp summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex:none}
+.grp[open] summary::before{transform:rotate(45deg)}
+.nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.sp{flex:1}
+.mini{min-height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:14px;white-space:nowrap}
+.mini:hover{border-color:var(--sky)}
+.tag{flex:none;display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;border-radius:6px;background:var(--c);color:#0b1726;font:600 13px Outfit,sans-serif}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));padding-top:8px}
+.grid.big{grid-template-columns:repeat(auto-fill,minmax(122px,1fr));min-height:260px;background:var(--sheet);border-radius:12px;padding:12px;align-content:start}
+.grid.big:empty{display:grid;place-items:center}
+.grid.big:empty::before{content:"Glisse des pages ici, clique sur une page source, ou tape une séquence ci-dessus.";grid-column:1/-1;color:var(--muted);font-size:15px;text-align:center;max-width:32ch}
+.pg{position:relative;border-radius:10px;background:var(--panel);border:2px solid transparent;padding:6px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.sgrid .pg{background:var(--sheet)}
+.pg:hover{border-color:var(--line)}
+.pg.sel{border-color:var(--hot);background:color-mix(in srgb,var(--hot) 12%,var(--panel))}
+.th{aspect-ratio:1;display:grid;place-items:center;border-radius:6px;overflow:hidden}
+.th img{max-width:90%;max-height:90%;background:#fff;box-shadow:0 1px 2px #0003,0 4px 10px #10223a22;transition:transform .2s}
+.th img:not([src]){visibility:hidden}
+.th:has(img:not([src])){background:linear-gradient(100deg,transparent 30%,#ffffff22 50%,transparent 70%) var(--line);background-size:200% 100%;animation:sh 1.2s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.cap{display:flex;align-items:center;gap:6px;font-size:13px;margin-top:4px;white-space:nowrap}
+.cap .tag{min-width:20px;height:20px;font-size:12px}
+.num{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+.cnt{margin-left:auto;color:var(--hot);font-weight:600}
+.sgrid .pg.in .th img{opacity:.55}
+.ico{position:absolute;top:4px;width:30px;height:30px;border-radius:8px;border:0;background:#10223acc;color:#fff;cursor:pointer;display:grid;place-items:center;opacity:0;transition:opacity .15s;padding:0}
+.ico svg{width:16px;height:16px}
+.zoom{left:4px}.x{right:4px}.x:hover{background:#d93a1a}
+.pg:hover .ico,.pg:focus-within .ico{opacity:1}
+@media(hover:none){.ico{opacity:.85}}
+.ghost-drag{opacity:.35}.chosen{box-shadow:0 10px 24px #10223a44}
+.drop{display:grid;justify-items:center;gap:8px;margin-top:12px;padding:22px 14px;border:2px dashed var(--line);border-radius:14px;color:var(--muted);text-align:center;cursor:pointer;font-size:15px}
+.drop:hover{border-color:var(--sky);color:var(--ink)}
+.drop svg{width:74px;height:60px}
+.seq{display:flex;flex-wrap:wrap;gap:8px}
+.seq input{flex:1 1 220px;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--sheet);padding:0 12px;font-size:16px}
+.seq button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:600}
+.seq button.pri{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.help{font-size:13px;color:var(--muted);margin:8px 0 0}
+code{background:var(--sheet);border-radius:4px;padding:1px 5px;font-size:13px;overflow-wrap:anywhere}
+.err{color:#d93a1a;font-size:14px;margin:6px 0 0;min-height:0}
+.err:empty{display:none}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 10px;align-items:center}
+.tools .mini{min-height:40px}
+.tools .mini:disabled{opacity:.4;cursor:not-allowed}
+.tools .selinfo{font-size:14px;color:var(--muted);margin-left:auto}
+.over{position:fixed;inset:0;background:#4fb3e8e6;color:#10223a;display:none;place-items:center;font:600 clamp(28px,5vw,48px) Outfit,sans-serif;z-index:50;pointer-events:none}
+.over.on{display:grid}
+.modal{position:fixed;inset:0;background:#06101cdd;z-index:40;display:grid;grid-template-rows:auto 1fr;padding:12px}
+.modal[hidden]{display:none}
+.mbar{display:flex;align-items:center;gap:10px;color:#fff;flex-wrap:wrap}
+.mbar .mini{color:#fff;border-color:#ffffff44;min-height:44px}
+.mstage{display:grid;place-items:center;overflow:auto;padding:10px}
+.mstage canvas{background:#fff;box-shadow:0 10px 40px #0008;max-width:100%}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:10px 16px;border-radius:10px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60;max-width:min(92vw,560px)}
+#toast.on{opacity:1}
+@media(max-width:600px){.fname input{width:100%}.fname,.acts{width:100%}.acts .btn{flex:1;justify-content:center}.chk{margin-left:0}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="band top">
+  <div>
+    <h1>Atelier PDF</h1>
+    <p>Dépose tes PDF, garde les pages voulues et range-les dans l'ordre que tu veux, puis exporte un seul fichier.</p>
+  </div>
+  <div class="acts">
+    <label class="btn ghost" for="file">+ Ajouter des PDF</label>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+    <label class="fname"><span>Nom du fichier</span><input id="fname" value="assemblage.pdf" spellcheck="false"></label>
+    <button id="export" class="btn hot">Exporter le PDF</button>
+  </div>
+</header>
+
+<main class="band work">
+  <section class="panel" aria-labelledby="h-src">
+    <div class="ph">
+      <h2 id="h-src">Sources</h2><span id="srcInfo" class="muted"></span>
+      <label class="chk"><input type="checkbox" id="auto" checked> Ajouter tout le PDF à l'import</label>
+    </div>
+    <p class="note" id="demoNote">Deux PDF d'exemple sont chargés pour la démo ; ils disparaissent dès que tu ajoutes les tiens.</p>
+    <div id="sources"></div>
+    <label for="file" class="drop" id="drop">
+      <svg viewBox="0 0 74 60" aria-hidden="true"><rect x="16" y="4" width="34" height="44" rx="3" fill="#4fb3e8" opacity=".35"/><rect x="24" y="10" width="34" height="44" rx="3" fill="#4fb3e8" opacity=".6"/><rect x="32" y="16" width="34" height="44" rx="3" fill="#fff" stroke="#4fb3e8" stroke-width="2"/><path d="M49 30v18M42 41l7 7 7-7" stroke="#ff7a1a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Dépose des PDF n'importe où sur la page, ou clique ici
+    </label>
+  </section>
+
+  <section class="panel" aria-labelledby="h-comp">
+    <div class="ph"><h2 id="h-comp">Assemblage</h2><span id="compInfo" class="muted"></span></div>
+    <form id="seqForm" class="seq" autocomplete="off">
+      <input id="seq" aria-label="Séquence rapide" placeholder="A2, C4-5, A1-80" spellcheck="false">
+      <button class="pri" value="replace">Remplacer</button>
+      <button value="append">Ajouter à la fin</button>
+    </form>
+    <p class="help">Lettre du PDF puis pages : <code>A2</code> <code>C4-5</code> <code>A1-80</code> <code>B7-fin</code> <code>A10-1</code> (à l'envers) <code>B</code> (tout). Ta notation marche aussi : <code>pdf1p2 → pdf3p4-5 → pdf1p1à80</code>. Les pages 4 et 5 s'écrivent <code>4-5</code> ou <code>4+5</code>.</p>
+    <p id="seqErr" class="err" role="alert"></p>
+    <div class="tools" id="tools">
+      <button class="mini" data-t="undo" title="Ctrl+Z">↶ Annuler</button>
+      <button class="mini" data-t="redo" title="Ctrl+Maj+Z">↷ Rétablir</button>
+      <button class="mini" data-t="rotl">⟲ 90°</button>
+      <button class="mini" data-t="rotr">⟳ 90°</button>
+      <button class="mini" data-t="dup">Dupliquer</button>
+      <button class="mini" data-t="del" title="Suppr">Retirer</button>
+      <button class="mini" data-t="all">Tout sélectionner</button>
+      <button class="mini" data-t="clear">Vider</button>
+      <span class="selinfo" id="selInfo"></span>
+    </div>
+    <div id="comp" class="grid big"></div>
+    <p class="help">Clic : sélectionner · Ctrl/Cmd+clic : ajouter à la sélection · Maj+clic : plage · Suppr : retirer · loupe : aperçu.</p>
+  </section>
+</main>
+
+<div class="over" id="over">Lâche tes PDF ici</div>
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-label="Aperçu de la page">
+  <div class="mbar">
+    <button class="mini" id="mPrev" aria-label="Page précédente">←</button>
+    <button class="mini" id="mNext" aria-label="Page suivante">→</button>
+    <span id="mTitle"></span><span class="sp"></span>
+    <button class="mini" id="mClose">Fermer</button>
+  </div>
+  <div class="mstage"><canvas id="mCanvas"></canvas></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+{
+const $ = s => document.querySelector(s);
+const LET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const COL = ['#4fb3e8','#ff9a4d','#57c98b','#f27aa0','#f5c542','#8fa6ff','#3cc7c7','#c9a27a'];
+const ZOOM = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>';
+const CROSS = '<svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+let S = [], C = [], sel = new Set(), lastId = null, past = [], fut = [], sid = 0, uidN = 0, thumbQ = Promise.resolve();
+const uid = () => 'c' + (++uidN);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const srcById = id => S.find(s => s.id === id);
+let tt;
+const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), 3200); };
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const dlP = (async () => { try { return window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) { return null; } })();
+
+/* ---------- historique ---------- */
+const snap = () => C.map(i => ({...i}));
+function commit() { past.push(snap()); if (past.length > 150) past.shift(); fut = []; }
+function undo() { if (!past.length) return; fut.push(snap()); C = past.pop(); renderComp(); }
+function redo() { if (!fut.length) return; past.push(snap()); C = fut.pop(); renderComp(); }
+
+/* ---------- cartes ---------- */
+function card(s, p, it, i) {
+  const u = s.thumbs[p];
+  const rot = it ? it.rot : 0;
+  return `<div class="pg${it && sel.has(it.id) ? ' sel' : ''}" data-src="${s.id}" data-p="${p}"${it ? ` data-id="${it.id}"` : ''} tabindex="0">
+    <div class="th"><img alt="Page ${p} de ${esc(s.name)}" data-k="${s.id}-${p}"${u ? ` src="${u}"` : ''}${rot ? ` style="transform:rotate(${rot}deg)"` : ''}></div>
+    <div class="cap"><span class="tag" style="--c:${s.color}">${s.label}</span>p. ${p}${it ? `<span class="num">#${i + 1}</span>` : '<span class="cnt"></span>'}</div>
+    <button class="ico zoom" type="button" aria-label="Aperçu">${ZOOM}</button>
+    ${it ? `<button class="ico x" type="button" aria-label="Retirer">${CROSS}</button>` : ''}
+  </div>`;
+}
+
+/* ---------- sources ---------- */
+function addSourceEl(s) {
+  const d = document.createElement('details');
+  d.className = 'grp'; d.open = true; d.dataset.id = s.id;
+  let cards = '';
+  for (let p = 1; p <= s.n; p++) cards += card(s, p);
+  d.innerHTML = `<summary><span class="tag" style="--c:${s.color}">${s.label}</span><span class="nm" title="${esc(s.name)}">${esc(s.name)}</span><span class="muted">${s.n} p.</span><span class="sp"></span><button class="mini" type="button" data-act="all">Tout ajouter</button><button class="mini" type="button" data-act="rm" aria-label="Retirer ce PDF">${'×'}</button></summary><div class="grid sgrid">${cards}</div>`;
+  $('#sources').appendChild(d);
+  if (window.Sortable) new Sortable(d.querySelector('.sgrid'), { group: { name: 'pg', pull: 'clone', put: false }, sort: false, animation: 150, draggable: '.pg', filter: '.ico', preventOnFilter: false, delay: 160, delayOnTouchOnly: true, ghostClass: 'ghost-drag', chosenClass: 'chosen' });
+  srcInfo();
+}
+function srcInfo() {
+  const n = S.reduce((a, s) => a + s.n, 0);
+  $('#srcInfo').textContent = S.length ? `${S.length} PDF · ${n} pages` : 'aucun PDF';
+  $('#demoNote').hidden = !S.some(s => s.demo);
+}
+function nextLabel() { return [...LET].find(l => !S.some(s => s.label === l)); }
+
+async function addBytes(name, bytes, demo) {
+  if (!window.pdfjsLib) throw new Error('lib');
+  const label = nextLabel();
+  if (!label) { toast('Maximum 26 PDF à la fois.'); return null; }
+  const doc = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+  const s = { id: 's' + (++sid), label, name, bytes, doc, n: doc.numPages, color: COL[LET.indexOf(label) % COL.length], thumbs: [], demo: !!demo };
+  S.push(s);
+  addSourceEl(s);
+  thumbQ = thumbQ.then(() => renderThumbs(s)).catch(() => {});
+  return s;
+}
+
+async function renderThumbs(s) {
+  for (let p = 1; p <= s.n; p++) {
+    if (!S.includes(s)) return;
+    const page = await s.doc.getPage(p);
+    const v1 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: 240 / Math.max(v1.width, v1.height) });
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    try { await page.render({ canvasContext: ctx, viewport: vp }).promise; } catch (e) {}
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+    if (!blob) continue;
+    const u = URL.createObjectURL(blob);
+    s.thumbs[p] = u;
+    document.querySelectorAll(`img[data-k="${s.id}-${p}"]`).forEach(im => im.src = u);
+    page.cleanup();
+  }
+}
+
+function removeSource(id) {
+  const s = srcById(id); if (!s) return;
+  S = S.filter(x => x !== s);
+  C = C.filter(i => i.src !== id);
+  past = past.map(h => h.filter(i => i.src !== id)); fut = fut.map(h => h.filter(i => i.src !== id));
+  document.querySelector(`.grp[data-id="${id}"]`)?.remove();
+  s.thumbs.forEach(u => u && URL.revokeObjectURL(u));
+  try { s.doc.destroy(); } catch (e) {}
+  srcInfo(); renderComp();
+}
+
+async function addFiles(files) {
+  const pdfs = [...files].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+  if (!pdfs.length) { toast('Seuls les fichiers PDF sont acceptés.'); return; }
+  if (S.some(s => s.demo)) { S.filter(s => s.demo).forEach(s => removeSource(s.id)); past = []; fut = []; renderComp(); }
+  for (const f of pdfs) {
+    try {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const s = await addBytes(f.name, bytes);
+      if (s && $('#auto').checked) { commit(); for (let p = 1; p <= s.n; p++) C.push({ id: uid(), src: s.id, p, rot: 0 }); renderComp(); }
+    } catch (e) {
+      toast(e && e.name === 'PasswordException' ? `« ${f.name} » est protégé par mot de passe.` : `Impossible de lire « ${f.name} ».`);
+    }
+  }
+}
+
+/* ---------- assemblage ---------- */
+function renderComp() {
+  C = C.filter(i => srcById(i.src));
+  const ids = new Set(C.map(i => i.id));
+  [...sel].forEach(x => { if (!ids.has(x)) sel.delete(x); });
+  $('#comp').innerHTML = C.map((it, i) => card(srcById(it.src), it.p, it, i)).join('');
+  const n = C.length;
+  $('#compInfo').textContent = n ? `${n} page${n > 1 ? 's' : ''} dans le PDF final` : 'vide';
+  const counts = {};
+  C.forEach(i => { const k = i.src + '-' + i.p; counts[k] = (counts[k] || 0) + 1; });
+  document.querySelectorAll('#sources .pg').forEach(el => {
+    const c = counts[el.dataset.src + '-' + el.dataset.p] || 0;
+    el.classList.toggle('in', c > 0);
+    el.querySelector('.cnt').textContent = c > 1 ? '×' + c : c ? '✓' : '';
+  });
+  updTools();
+}
+function updTools() {
+  const t = k => document.querySelector(`[data-t="${k}"]`);
+  t('undo').disabled = !past.length; t('redo').disabled = !fut.length;
+  ['rotl', 'rotr', 'dup', 'del'].forEach(k => t(k).disabled = !sel.size);
+  t('all').disabled = t('clear').disabled = !C.length;
+  $('#selInfo').textContent = sel.size ? `${sel.size} sélectionnée${sel.size > 1 ? 's' : ''}` : '';
+  $('#export').disabled = !C.length;
+  document.querySelectorAll('#comp .pg').forEach(el => el.classList.toggle('sel', sel.has(el.dataset.id)));
+}
+function tool(k) {
+  if (k === 'undo') return undo();
+  if (k === 'redo') return redo();
+  if (k === 'all') { C.forEach(i => sel.add(i.id)); return updTools(); }
+  if (k === 'clear') { if (!C.length) return; commit(); C = []; sel.clear(); return renderComp(); }
+  if (!sel.size) return;
+  commit();
+  if (k === 'rotl' || k === 'rotr') C.forEach(i => { if (sel.has(i.id)) i.rot = (i.rot + (k === 'rotr' ? 90 : 270)) % 360; });
+  if (k === 'del') C = C.filter(i => !sel.has(i.id));
+  if (k === 'dup') { const out = [], ns = new Set(); C.forEach(i => { out.push(i); if (sel.has(i.id)) { const d = { ...i, id: uid() }; out.push(d); ns.add(d.id); } }); C = out; sel = ns; }
+  renderComp();
+}
+
+/* ---------- séquence rapide ---------- */
+function parseSeq(str) {
+  const out = [], errs = [];
+  let cur = null;
+  const toks = str.toLowerCase().replace(/->|=>|→|>/g, ',').split(/[\s,;|]+/).filter(Boolean);
+  for (const t of toks) {
+    let lab = null, rest;
+    let m = t.match(/^pdf(\d+)$/);
+    if (m) { lab = LET[+m[1] - 1]; rest = ''; }
+    else {
+      m = t.match(/^(?:pdf)?(?:([a-z])|(\d+)(?=[p:]))?[p:]?(.*)$/);
+      if (!m) { errs.push(`« ${t} » illisible`); continue; }
+      if (m[1]) lab = m[1].toUpperCase(); else if (m[2]) lab = LET[+m[2] - 1];
+      rest = m[3];
+    }
+    const s = lab ? S.find(x => x.label === lab) : cur;
+    if (!s) { errs.push(lab ? `« ${t} » : pas de PDF ${lab}` : `« ${t} » : indique d'abord la lettre du PDF`); continue; }
+    cur = s;
+    if (!rest) { for (let p = 1; p <= s.n; p++) out.push({ src: s.id, p }); continue; }
+    for (const part of rest.split(/[+&]/)) {
+      const r = part.match(/^(\d+|fin|end|n)(?:(?:-|à|a|to|\.\.)(\d+|fin|end|n)?)?$/);
+      if (!r) { errs.push(`« ${t} » : pages « ${part} » illisibles`); continue; }
+      const v = x => /^\d+$/.test(x) ? +x : s.n;
+      const a = v(r[1]), b = r[2] !== undefined ? v(r[2]) : (/[-àa]|to|\.\./.test(part.slice(r[1].length)) ? s.n : a);
+      if (a < 1 || b < 1 || a > s.n || b > s.n) { errs.push(`« ${t} » : ${s.label} n'a que ${s.n} pages`); continue; }
+      const st = a <= b ? 1 : -1;
+      for (let p = a; st > 0 ? p <= b : p >= b; p += st) out.push({ src: s.id, p });
+    }
+  }
+  return { out, errs };
+}
+
+/* ---------- aperçu ---------- */
+let mList = [], mIdx = 0, mTask = null;
+function openPreview(list, i) { mList = list; mIdx = i; $('#modal').hidden = false; drawPreview(); $('#mClose').focus(); }
+async function drawPreview() {
+  const it = mList[mIdx], s = srcById(it.src);
+  if (!s) return closePreview();
+  $('#mTitle').textContent = `${s.label} · ${s.name} · page ${it.p}/${s.n}  (${mIdx + 1}/${mList.length})`;
+  $('#mPrev').disabled = mIdx === 0; $('#mNext').disabled = mIdx === mList.length - 1;
+  const page = await s.doc.getPage(it.p);
+  const rotation = (page.rotate + (it.rot || 0)) % 360;
+  const v1 = page.getViewport({ scale: 1, rotation });
+  const fit = Math.min((innerWidth - 40) / v1.width, (innerHeight - 110) / v1.height, 2.5);
+  const dpr = devicePixelRatio || 1;
+  const vp = page.getViewport({ scale: fit * dpr, rotation });
+  const c = $('#mCanvas');
+  if (mTask) { try { mTask.cancel(); } catch (e) {} }
+  c.width = vp.width; c.height = vp.height; c.style.width = vp.width / dpr + 'px'; c.style.height = vp.height / dpr + 'px';
+  mTask = page.render({ canvasContext: c.getContext('2d'), viewport: vp });
+  try { await mTask.promise; } catch (e) {}
+}
+function closePreview() { $('#modal').hidden = true; }
+$('#mClose').onclick = closePreview;
+$('#mPrev').onclick = () => { if (mIdx > 0) { mIdx--; drawPreview(); } };
+$('#mNext').onclick = () => { if (mIdx < mList.length - 1) { mIdx++; drawPreview(); } };
+$('#modal').addEventListener('click', e => { if (e.target.classList.contains('mstage')) closePreview(); });
+
+/* ---------- export ---------- */
+$('#export').onclick = async () => {
+  if (!C.length) return;
+  const btn = $('#export'), lbl = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Préparation…';
+  try {
+    if (!window.PDFLib) throw new Error('La bibliothèque PDF n’a pas pu se charger.');
+    const { PDFDocument, degrees } = PDFLib;
+    const out = await PDFDocument.create();
+    const loaded = {};
+    for (const id of new Set(C.map(i => i.src))) loaded[id] = await PDFDocument.load(srcById(id).bytes, { ignoreEncryption: true });
+    const occ = {}, batches = {}, copied = {};
+    const plan = C.map(i => { const k = i.src + '-' + i.p; const b = occ[k] = (occ[k] || 0) + 1; const bk = i.src + '|' + (b - 1); (batches[bk] = batches[bk] || []).push(i.p); return { ...i, bk }; });
+    for (const bk in batches) {
+      const src = bk.split('|')[0];
+      const pages = await out.copyPages(loaded[src], batches[bk].map(p => p - 1));
+      batches[bk].forEach((p, j) => copied[bk + '|' + p] = pages[j]);
+    }
+    for (const i of plan) {
+      const pg = copied[i.bk + '|' + i.p];
+      if (i.rot) pg.setRotation(degrees((pg.getRotation().angle + i.rot) % 360));
+      out.addPage(pg);
+    }
+    const bytes = await out.save();
+    let name = ($('#fname').value || 'assemblage').trim().replace(/[\\/:*?"<>|]+/g, '-');
+    if (!/\.pdf$/i.test(name)) name += '.pdf';
+    btn.textContent = 'Téléchargement…';
+    let dl = await dlP;
+    if (!dl && window.claude && window.claude.use) dl = await window.claude.use('downloads');
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    if (dl) await dl.save({ filename: name, data: blob });
+    else {
+      const u = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 60000);
+    }
+    toast(`${name} enregistré · ${C.length} pages`);
+  } catch (e) {
+    const c = e && e.code;
+    toast(c === 'declined' ? 'Téléchargement annulé.' : c === 'rate_limited' ? 'Une demande est déjà ouverte, réessaie dans un instant.' : 'Export impossible : ' + (e && e.message || 'erreur inconnue'));
+  } finally { btn.disabled = !C.length; btn.textContent = lbl; }
+};
+
+/* ---------- événements ---------- */
+$('#file').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+
+$('#sources').addEventListener('click', e => {
+  const act = e.target.closest('[data-act]');
+  if (act) {
+    e.preventDefault();
+    const id = act.closest('.grp').dataset.id, s = srcById(id);
+    if (act.dataset.act === 'rm') return removeSource(id);
+    commit(); for (let p = 1; p <= s.n; p++) C.push({ id: uid(), src: id, p, rot: 0 }); renderComp();
+    return toast(`${s.n} pages de ${s.label} ajoutées`);
+  }
+  const pg = e.target.closest('.pg'); if (!pg) return;
+  const s = srcById(pg.dataset.src);
+  if (e.target.closest('.zoom')) { const l = []; for (let p = 1; p <= s.n; p++) l.push({ src: s.id, p, rot: 0 }); return openPreview(l, +pg.dataset.p - 1); }
+  commit(); C.push({ id: uid(), src: s.id, p: +pg.dataset.p, rot: 0 }); renderComp();
+  toast(`${s.label} p. ${pg.dataset.p} ajoutée en position ${C.length}`);
+});
+
+$('#comp').addEventListener('click', e => {
+  const pg = e.target.closest('.pg'); if (!pg) return;
+  const id = pg.dataset.id, idx = C.findIndex(i => i.id === id);
+  if (e.target.closest('.x')) { commit(); C.splice(idx, 1); sel.delete(id); return renderComp(); }
+  if (e.target.closest('.zoom')) return openPreview(C, idx);
+  if (e.shiftKey && lastId) {
+    const a = C.findIndex(i => i.id === lastId), [lo, hi] = a < idx ? [a, idx] : [idx, a];
+    if (!(e.ctrlKey || e.metaKey)) sel.clear();
+    for (let k = lo; k <= hi; k++) sel.add(C[k].id);
+  } else if (e.ctrlKey || e.metaKey) { sel.has(id) ? sel.delete(id) : sel.add(id); lastId = id; }
+  else { const only = sel.size === 1 && sel.has(id); sel.clear(); if (!only) sel.add(id); lastId = id; }
+  updTools();
+});
+$('#comp').addEventListener('dblclick', e => { const pg = e.target.closest('.pg'); if (pg) openPreview(C, C.findIndex(i => i.id === pg.dataset.id)); });
+
+if (window.Sortable) new Sortable($('#comp'), {
+  group: { name: 'pg', pull: false, put: true }, animation: 150, draggable: '.pg', filter: '.ico', preventOnFilter: false,
+  delay: 160, delayOnTouchOnly: true, ghostClass: 'ghost-drag', chosenClass: 'chosen',
+  onAdd: ev => { const { src, p } = ev.item.dataset; ev.item.remove(); commit(); C.splice(ev.newIndex, 0, { id: uid(), src, p: +p, rot: 0 }); renderComp(); },
+  onUpdate: ev => { commit(); const [m] = C.splice(ev.oldIndex, 1); C.splice(ev.newIndex, 0, m); renderComp(); }
+});
+
+$('#tools').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) tool(b.dataset.t); });
+
+$('#seqForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const mode = e.submitter ? e.submitter.value : 'replace';
+  const { out, errs } = parseSeq($('#seq').value);
+  $('#seqErr').textContent = errs.join(' · ');
+  if (!out.length) { if (!errs.length) $('#seqErr').textContent = 'Tape une séquence, par exemple A2, B1-3.'; return; }
+  commit();
+  const items = out.map(o => ({ id: uid(), ...o, rot: 0 }));
+  C = mode === 'append' ? C.concat(items) : items;
+  sel.clear(); renderComp();
+  toast(`${items.length} page${items.length > 1 ? 's' : ''} ${mode === 'append' ? 'ajoutées' : 'dans l’assemblage'}`);
+});
+
+document.addEventListener('keydown', e => {
+  if (!$('#modal').hidden) {
+    if (e.key === 'Escape') closePreview();
+    if (e.key === 'ArrowLeft') $('#mPrev').click();
+    if (e.key === 'ArrowRight') $('#mNext').click();
+    return;
+  }
+  if (e.target.closest('input,textarea')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && sel.size) { e.preventDefault(); tool('del'); }
+  else if (e.key === 'Escape') { sel.clear(); updTools(); }
+  else if (e.key === 'Enter' && e.target.closest('#sources .pg')) e.target.click();
+});
+
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+addEventListener('dragenter', e => { if (hasFiles(e)) { dragDepth++; $('#over').classList.add('on'); } });
+addEventListener('dragleave', e => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; $('#over').classList.remove('on'); } });
+addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+addEventListener('drop', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; $('#over').classList.remove('on'); addFiles(e.dataTransfer.files); });
+
+/* ---------- démo ---------- */
+async function makeDemo(title, n, col) {
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const d = await PDFDocument.create();
+  const fb = await d.embedFont(StandardFonts.HelveticaBold), fr = await d.embedFont(StandardFonts.Helvetica);
+  const c = rgb(...col), ink = rgb(0.06, 0.13, 0.23), grey = rgb(0.85, 0.89, 0.93);
+  for (let i = 1; i <= n; i++) {
+    const pg = d.addPage([595, 842]);
+    pg.drawRectangle({ x: 0, y: 732, width: 595, height: 110, color: c });
+    pg.drawText(title, { x: 44, y: 776, size: 30, font: fb, color: ink });
+    const t = String(i), w = fb.widthOfTextAtSize(t, 280);
+    pg.drawText(t, { x: (595 - w) / 2, y: 330, size: 280, font: fb, color: c });
+    for (let k = 0; k < 7; k++) pg.drawRectangle({ x: 44, y: 250 - k * 24, width: k % 3 === 2 ? 330 : 507, height: 9, color: grey });
+    pg.drawText(`Page ${i} sur ${n}`, { x: 44, y: 44, size: 13, font: fr, color: ink });
+  }
+  return d.save();
+}
+(async () => {
+  renderComp();
+  if (!window.pdfjsLib || !window.PDFLib) { toast('Les bibliothèques PDF ne se sont pas chargées. Recharge la page.'); srcInfo(); return; }
+  try {
+    await addBytes('Rapport-exemple.pdf', await makeDemo('Rapport', 6, [0.31, 0.70, 0.91]), true);
+    await addBytes('Annexes-exemple.pdf', await makeDemo('Annexes', 4, [1, 0.6, 0.3]), true);
+    $('#seq').value = 'A1, B2-3, A3-6, B1';
+    C = parseSeq($('#seq').value).out.map(o => ({ id: uid(), ...o, rot: 0 }));
+    renderComp();
+  } catch (e) { srcInfo(); }
+})();
+}
+</script>
+</body>
+</html>
